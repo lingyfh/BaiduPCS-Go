@@ -785,6 +785,88 @@ func main() {
 			},
 		},
 		{
+			Name:      "lsall",
+			Aliases:   []string{"llll"},
+			Usage:     "列出目录及子目录中的所有文件",
+			UsageText: app.Name + " lsall <目录>",
+			Description: `
+	列出当前工作目录内的文件和目录, 或指定目录内的文件和目录, 并递归列出子目录
+
+	示例:
+
+	列出 我的资源 内的文件和目录
+	BaiduPCS-Go ls 我的资源
+
+	绝对路径
+	BaiduPCS-Go ls /我的资源
+
+	降序排序
+	BaiduPCS-Go ls -desc 我的资源
+
+	按文件大小降序排序
+	BaiduPCS-Go ls -size -desc 我的资源
+
+	使用通配符
+	BaiduPCS-Go ls /我的*
+`,
+			Category: "百度网盘",
+			Before:   reloadFn,
+			Action: func(c *cli.Context) error {
+				orderOptions := &baidupcs.OrderOptions{}
+				switch {
+				case c.IsSet("asc"):
+					orderOptions.Order = baidupcs.OrderAsc
+				case c.IsSet("desc"):
+					orderOptions.Order = baidupcs.OrderDesc
+				default:
+					orderOptions.Order = baidupcs.OrderAsc
+				}
+
+				switch {
+				case c.IsSet("time"):
+					orderOptions.By = baidupcs.OrderByTime
+				case c.IsSet("name"):
+					orderOptions.By = baidupcs.OrderByName
+				case c.IsSet("size"):
+					orderOptions.By = baidupcs.OrderBySize
+				default:
+					orderOptions.By = baidupcs.OrderByName
+				}
+
+				pcscommand.RunLsAll(c.Args().Get(0), &pcscommand.LsOptions{
+					Total: c.Parent().Args().Get(0) == "llll",
+				}, orderOptions)
+
+				return nil
+			},
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "l",
+					Usage: "详细显示",
+				},
+				cli.BoolFlag{
+					Name:  "asc",
+					Usage: "升序排序",
+				},
+				cli.BoolFlag{
+					Name:  "desc",
+					Usage: "降序排序",
+				},
+				cli.BoolFlag{
+					Name:  "time",
+					Usage: "根据时间排序",
+				},
+				cli.BoolFlag{
+					Name:  "name",
+					Usage: "根据文件名排序",
+				},
+				cli.BoolFlag{
+					Name:  "size",
+					Usage: "根据大小排序",
+				},
+			},
+		},
+		{
 			Name:      "search",
 			Aliases:   []string{"s"},
 			Usage:     "搜索文件",

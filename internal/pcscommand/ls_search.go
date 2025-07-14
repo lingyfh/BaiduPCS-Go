@@ -2,13 +2,15 @@ package pcscommand
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"strconv"
+
+	"github.com/olekukonko/tablewriter"
 	"github.com/qjfoidnh/BaiduPCS-Go/baidupcs"
 	"github.com/qjfoidnh/BaiduPCS-Go/pcstable"
 	"github.com/qjfoidnh/BaiduPCS-Go/pcsutil/converter"
 	"github.com/qjfoidnh/BaiduPCS-Go/pcsutil/pcstime"
-	"github.com/olekukonko/tablewriter"
-	"os"
-	"strconv"
 )
 
 type (
@@ -27,7 +29,54 @@ type (
 const (
 	opLs int = iota
 	opSearch
+	opLsPath
 )
+
+func getDirPath(pcspath string, dirname string) string {
+	return path.Join(pcspath, dirname) + baidupcs.PathSeparator
+}
+
+func getAllFiles(pcspath string, orderOptions *baidupcs.OrderOptions) (baidupcs.FileDirectoryList, error) {
+	var files baidupcs.FileDirectoryList
+	files, err := GetBaiduPCS().FilesDirectoriesList(pcspath, orderOptions)
+	if err != nil {
+		return nil, err
+	}
+	all_files := files
+	for _, file := range files {
+		if file.Isdir {
+			subfiles, err := getAllFiles(getDirPath(pcspath, file.Filename), orderOptions)
+			if err != nil {
+				return nil, err
+			}
+			all_files = append(all_files, subfiles...)
+		}
+	}
+	return all_files, nil
+}
+
+func RunLsAll(pcspath string, lsOptions *LsOptions, orderOptions *baidupcs.OrderOptions) {
+	err := matchPathByShellPatternOnce(&pcspath)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	files, err := getAllFiles(pcspath, orderOptions)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("\n当前目录: %s\n----\n", pcspath)
+
+	if lsOptions == nil {
+		lsOptions = &LsOptions{}
+	}
+
+	renderTable(opLsPath, lsOptions.Total, pcspath, files)
+	return
+}
 
 // RunLs 执行列目录
 func RunLs(pcspath string, lsOptions *LsOptions, orderOptions *baidupcs.OrderOptions) {
@@ -110,24 +159,28 @@ func renderTable(op int, isTotal bool, path string, files baidupcs.FileDirectory
 				tb.Append([]string{strconv.Itoa(k), strconv.FormatInt(file.FsID, 10), strconv.FormatInt(file.AppID, 10), converter.ConvertFileSize(file.Size, 2), pcstime.FormatTime(file.Ctime), pcstime.FormatTime(file.Mtime), md5, file.Filename})
 			case opSearch:
 				tb.Append([]string{strconv.Itoa(k), strconv.FormatInt(file.FsID, 10), strconv.FormatInt(file.AppID, 10), converter.ConvertFileSize(file.Size, 2), pcstime.FormatTime(file.Ctime), pcstime.FormatTime(file.Mtime), md5, file.Path})
+			case opLsPath:
+				tb.Append([]string{strconv.Itoa(k), strconv.FormatInt(file.FsID, 10), strconv.FormatInt(file.AppID, 10), converter.ConvertFileSize(file.Size, 2), pcstime.FormatTime(file.Ctime), pcstime.FormatTime(file.Mtime), md5, file.Path})
 			}
 		}
 		fN, dN = files.Count()
 		tb.Append([]string{"", "", "总: " + converter.ConvertFileSize(files.TotalSize(), 2), "", "", "", fmt.Sprintf("文件总数: %d, 目录总数: %d", fN, dN)})
 	} else {
-		tb.SetHeader([]string{"#", "文件大小", "修改日期", showPath})
-		tb.SetColumnAlignment([]int{tablewriter.ALIGN_DEFAULT, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
+		tb.SetHeader([]string{"#", "文件大小", "文件大小(byte)", "修改日期", showPath})
+		tb.SetColumnAlignment([]int{tablewriter.ALIGN_DEFAULT, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT})
 		for k, file := range files {
 			if file.Isdir {
-				tb.Append([]string{strconv.Itoa(k), "-", pcstime.FormatTime(file.Mtime), file.Filename + baidupcs.PathSeparator})
+				tb.Append([]string{strconv.Itoa(k), "-", "-", pcstime.FormatTime(file.Mtime), file.Filename + baidupcs.PathSeparator})
 				continue
 			}
 
 			switch op {
 			case opLs:
-				tb.Append([]string{strconv.Itoa(k), converter.ConvertFileSize(file.Size, 2), pcstime.FormatTime(file.Mtime), file.Filename})
+				tb.Append([]string{strconv.Itoa(k), converter.ConvertFileSize(file.Size, 2), strconv.FormatInt(file.Size, 10), pcstime.FormatTime(file.Mtime), file.Filename})
 			case opSearch:
-				tb.Append([]string{strconv.Itoa(k), converter.ConvertFileSize(file.Size, 2), pcstime.FormatTime(file.Mtime), file.Path})
+				tb.Append([]string{strconv.Itoa(k), converter.ConvertFileSize(file.Size, 2), strconv.FormatInt(file.Size, 10), pcstime.FormatTime(file.Mtime), file.Path})
+			case opLsPath:
+				tb.Append([]string{strconv.Itoa(k), converter.ConvertFileSize(file.Size, 2), strconv.FormatInt(file.Size, 10), pcstime.FormatTime(file.Mtime), file.Path})
 			}
 		}
 		fN, dN = files.Count()
