@@ -2,8 +2,6 @@ package baidupcs
 
 import (
 	"fmt"
-	"github.com/qjfoidnh/BaiduPCS-Go/requester"
-	"github.com/tidwall/gjson"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -12,6 +10,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/qjfoidnh/BaiduPCS-Go/requester"
+	"github.com/tidwall/gjson"
 )
 
 type (
@@ -58,6 +59,7 @@ func (pcs *BaiduPCS) ExtractShareInfo(shareURL, shardID, shareUK, bdstoken strin
 		}
 		return
 	}
+	res["list"] = gjson.Get(string(body), `list`).String()
 	res["filename"] = gjson.Get(string(body), `list.0.server_filename`).String()
 	fsidList := gjson.Get(string(body), `list.#.fs_id`).Array()
 	var fidsStr string = "["
@@ -190,31 +192,57 @@ func (pcs *BaiduPCS) GenerateRequestQuery(mode string, params map[string]string)
 		res["ErrMsg"] = "返回json解析错误"
 		return
 	}
+	fmt.Printf("body: %s\n", string(body))
 	errno := gjson.Get(string(body), `errno`).Int()
+
 	if errno != 0 {
 		res["ErrNo"] = "3"
 		res["ErrMsg"] = "获取分享项元数据错误"
 		if mode == "POST" && errno == 12 {
-			path := gjson.Get(string(body), `info.0.path`).String()
-			_, file := filepath.Split(path) // Should be path.Split here, but never mind~
-			_errno := gjson.Get(string(body), `info.0.errno`).Int()
-			targetFileNums := gjson.Get(string(body), `target_file_nums`).Int()
-			targetFileNumsLimit := gjson.Get(string(body), `target_file_nums_limit`).Int()
-			if targetFileNums > targetFileNumsLimit {
-				res["ErrNo"] = "4"
-				res["ErrMsg"] = fmt.Sprintf("转存文件数%d超过当前用户上限, 当前用户单次最大转存数%d", targetFileNums, targetFileNumsLimit)
-				res["limit"] = fmt.Sprintf("%d", targetFileNumsLimit)
-			} else if _errno == -30 {
-				res["ErrNo"] = "9"
-				res["ErrMsg"] = fmt.Sprintf("当前目录下已有%s同名文件/文件夹", file)
+			// Check all errno values in info array
+			infoArray := gjson.Get(string(body), "info").Array()
+			var nonZeroErrno int64 = 0
+			for _, info := range infoArray {
+				itemErrno := info.Get("errno").Int()
+				if itemErrno != 0 {
+					nonZeroErrno = itemErrno
+					break
+				}
+			}
+
+			if nonZeroErrno != 0 {
+				_errno := nonZeroErrno
+				path := gjson.Get(string(body), `info.0.path`).String()
+				_, file := filepath.Split(path)
+				targetFileNums := gjson.Get(string(body), `target_file_nums`).Int()
+				targetFileNumsLimit := gjson.Get(string(body), `target_file_nums_limit`).Int()
+				if targetFileNums > targetFileNumsLimit {
+					res["ErrNo"] = "4"
+					res["ErrMsg"] = fmt.Sprintf("转存文件数%d超过当前用户上限, 当前用户单次最大转存数%d", targetFileNums, targetFileNumsLimit)
+					res["limit"] = fmt.Sprintf("%d", targetFileNumsLimit)
+				} else if _errno == -30 {
+					res["ErrNo"] = "9"
+					res["ErrMsg"] = fmt.Sprintf("当前目录下已有%s同名文件/文件夹", file)
+				} else if _errno != 0 {
+					res["ErrMsg"] = fmt.Sprintf("未知错误, 错误代码%d", _errno)
+				} else {
+					// All errno values are 0, continue normal processing
+					goto CONTINUE_PROCESSING
+				}
 			} else {
-				res["ErrMsg"] = fmt.Sprintf("未知错误, 错误代码%d", _errno)
+				// All errno values are 0, continue normal processing
+				goto CONTINUE_PROCESSING
 			}
 		} else if mode == "POST" && errno == 4 {
 			res["ErrMsg"] = fmt.Sprintf("文件重复")
 		}
 		return
 	}
+
+
+CONTINUE_PROCESSING:
+	res["ErrNo"] = "0"
+	res["ErrMsg"] = ""
 	_, res["filename"] = filepath.Split(gjson.Get(string(body), `info.0.path`).String())
 	filenames := gjson.Get(string(body), `info.#.path`).Array()
 	filenamesStr := ""

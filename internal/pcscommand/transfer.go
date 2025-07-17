@@ -2,23 +2,23 @@ package pcscommand
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"github.com/qjfoidnh/BaiduPCS-Go/baidupcs"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qjfoidnh/BaiduPCS-Go/baidupcs"
 )
 
-// RunShareTransfer 执行分享链接转存到网盘
-func RunShareTransfer(params []string, opt *baidupcs.TransferOption) {
+func RunShareFileInfo(params []string) {
 	var link string
 	var extraCode string
 	if len(params) == 1 {
 		link = params[0]
 		if strings.Contains(link, "bdlink=") || !strings.Contains(link, "pan.baidu.com/") {
-			//RunRapidTransfer(link, opt.Rname)
 			fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, "秒传已不再被支持")
 			return
 		}
@@ -83,6 +83,7 @@ func RunShareTransfer(params []string, opt *baidupcs.TransferOption) {
 		"shorturl": featureStr[1:],
 		"channel":  "chunlei",
 	}
+
 	queryShareInfoUrl := pcs.GenerateShareQueryURL("list", featureMap).String()
 	transMetas := pcs.ExtractShareInfo(queryShareInfoUrl, tokens["shareid"], tokens["share_uk"], tokens["bdstoken"])
 
@@ -90,15 +91,163 @@ func RunShareTransfer(params []string, opt *baidupcs.TransferOption) {
 		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, transMetas["ErrMsg"])
 		return
 	}
-	transMetas["path"] = GetActiveUser().Workdir
+	var fileList baidupcs.FileDirectoryList
+	var fdJSONList []*struct {
+		FsID           string `json:"fs_id"`
+		AppID          string `json:"app_id,omitempty"`
+		Path           string `json:"path"`
+		Filename       string `json:"server_filename"`
+		Ctime          string `json:"server_ctime"`
+		Mtime          string `json:"server_mtime"`
+		MD5            string `json:"md5"`
+		Size           string `json:"size"`
+		IsdirInt       string `json:"isdir"`
+		IfhassubdirInt string `json:"ifhassubdir,omitempty"`
+	}
+	err := json.Unmarshal([]byte(transMetas["list"]), &fdJSONList)
+	if err != nil {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, err)
+		return
+	}
+
+	// Convert the JSON structure to FileDirectoryList
+	fileList = make(baidupcs.FileDirectoryList, 0, len(fdJSONList))
+	for _, item := range fdJSONList {
+		fsID, _ := strconv.ParseInt(item.FsID, 10, 64)
+		appID, _ := strconv.ParseInt(item.AppID, 10, 64)
+		ctime, _ := strconv.ParseInt(item.Ctime, 10, 64)
+		mtime, _ := strconv.ParseInt(item.Mtime, 10, 64)
+		size, _ := strconv.ParseInt(item.Size, 10, 64)
+		isdir, _ := strconv.ParseInt(item.IsdirInt, 10, 64)
+		ifhassubdir, _ := strconv.ParseInt(item.IfhassubdirInt, 10, 64)
+
+		fd := &baidupcs.FileDirectory{
+			FsID:        fsID,
+			AppID:       appID,
+			Path:        item.Path,
+			Filename:    item.Filename,
+			Ctime:       ctime,
+			Mtime:       mtime,
+			MD5:         item.MD5,
+			Size:        size,
+			Isdir:       isdir == 1,
+			Ifhassubdir: ifhassubdir == 1,
+		}
+		fileList = append(fileList, fd)
+	}
+	fmt.Printf("获取分享文件成功: \n")
+	renderTable(opLs, false, "", fileList)
+	return
+}
+
+// RunShareTransfer 执行分享链接转存到网盘
+func RunShareTransfer(params []string, opt *baidupcs.TransferOption) {
+	var link string
+	var extraCode string
+	var savePath string
+	if len(params) == 1 {
+		link = params[0]
+		if strings.Contains(link, "bdlink=") || !strings.Contains(link, "pan.baidu.com/") {
+			//RunRapidTransfer(link, opt.Rname)
+			fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, "秒传已不再被支持")
+			return
+		}
+		extraCode = "none"
+		if strings.Contains(link, "?pwd=") {
+			extraCode = strings.Split(link, "?pwd=")[1]
+			link = strings.Split(link, "?pwd=")[0]
+		}
+	} else if len(params) == 2 {
+		link = params[0]
+		if strings.Contains(link, "?pwd=") {
+			extraCode = strings.Split(link, "?pwd=")[1]
+			link = strings.Split(link, "?pwd=")[0]
+			savePath = params[1]
+		} else {
+			extraCode = params[1]
+		}
+	} else if len(params) == 3 {
+		link = params[0]
+		extraCode = params[1]
+		savePath = params[2]
+	}
+	if link[len(link)-1:] == "/" {
+		link = link[0 : len(link)-1]
+	}
+	//fmt.Printf("link: %s\n", link)
+	//fmt.Printf("code: %s\n", extraCode)
+	//fmt.Printf("dir: %s\n", savePath)
+	featureStrs := strings.Split(link, "/")
+	featureStr := featureStrs[len(featureStrs)-1]
+	if strings.Contains(featureStr, "init?") {
+		featureStr = "1" + strings.Split(featureStr, "=")[1]
+	}
+	if len(featureStr) > 23 || featureStr[0:1] != "1" || len(extraCode) != 4 {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, "链接地址或提取码非法")
+		return
+	}
+	pcs := GetBaiduPCS()
+	tokens := pcs.AccessSharePage(featureStr, true)
+	if tokens["ErrMsg"] != "0" {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, tokens["ErrMsg"])
+		return
+	}
+
+	if extraCode != "none" {
+		verifyUrl := pcs.GenerateShareQueryURL("verify", map[string]string{
+			"shareid":    tokens["shareid"],
+			"time":       strconv.Itoa(int(time.Now().UnixMilli())),
+			"clienttype": "1",
+			"uk":         tokens["share_uk"],
+		}).String()
+		res := pcs.PostShareQuery(verifyUrl, link, map[string]string{
+			"pwd":       extraCode,
+			"vcode":     "null",
+			"vcode_str": "null",
+			"bdstoken":  tokens["bdstoken"],
+		})
+		if res["ErrMsg"] != "0" {
+			fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, res["ErrMsg"])
+			return
+		}
+	}
+	pcs.UpdatePCSCookies(true)
+
+	tokens = pcs.AccessSharePage(featureStr, false)
+	if tokens["ErrMsg"] != "0" {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, tokens["ErrMsg"])
+		return
+	}
+	featureMap := map[string]string{
+		"bdstoken": tokens["bdstoken"],
+		"root":     "1",
+		"web":      "5",
+		"app_id":   baidupcs.PanAppID,
+		"shorturl": featureStr[1:],
+		"channel":  "chunlei",
+	}
+	queryShareInfoUrl := pcs.GenerateShareQueryURL("list", featureMap).String()
+	transMetas := pcs.ExtractShareInfo(queryShareInfoUrl, tokens["shareid"], tokens["share_uk"], tokens["bdstoken"])
+
+	if transMetas["ErrMsg"] != "success" {
+		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, transMetas["ErrMsg"])
+		return
+	}
+	if savePath != "" {
+		transMetas["path"] = savePath
+		pcs.Mkdir(transMetas["path"])
+	} else {
+		transMetas["path"] = GetActiveUser().Workdir
+	}
 	if transMetas["item_num"] != "1" && opt.Collect {
 		transMetas["filename"] += "等文件"
-		transMetas["path"] = path.Join(GetActiveUser().Workdir, transMetas["filename"])
+		transMetas["path"] = path.Join(transMetas["path"], transMetas["filename"])
 		pcs.Mkdir(transMetas["path"])
 	}
 	transMetas["referer"] = "https://pan.baidu.com/s/" + featureStr
 	pcs.UpdatePCSCookies(true)
 	resp := pcs.GenerateRequestQuery("POST", transMetas)
+
 	if resp["ErrNo"] != "0" {
 		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareFileSavetoLocal, resp["ErrMsg"])
 		//if resp["ErrNo"] == "4" {
@@ -110,7 +259,7 @@ func RunShareTransfer(params []string, opt *baidupcs.TransferOption) {
 	if opt.Collect {
 		resp["filename"] = transMetas["filename"]
 	}
-	fmt.Printf("%s成功, 保存了%s到当前目录\n", baidupcs.OperationShareFileSavetoLocal, resp["filename"])
+	fmt.Printf("%s成功, 保存了%s到目录: %s\n", baidupcs.OperationShareFileSavetoLocal, resp["filename"], transMetas["path"])
 	if opt.Download {
 		fmt.Println("即将开始下载")
 		paths := strings.Split(resp["filenames"], ",")

@@ -795,19 +795,19 @@ func main() {
 	示例:
 
 	列出 我的资源 内的文件和目录
-	BaiduPCS-Go ls 我的资源
+	BaiduPCS-Go lsall 我的资源
 
 	绝对路径
-	BaiduPCS-Go ls /我的资源
+	BaiduPCS-Go lsall /我的资源
 
 	降序排序
-	BaiduPCS-Go ls -desc 我的资源
+	BaiduPCS-Go lsall -desc 我的资源
 
 	按文件大小降序排序
-	BaiduPCS-Go ls -size -desc 我的资源
+	BaiduPCS-Go lsall -size -desc 我的资源
 
 	使用通配符
-	BaiduPCS-Go ls /我的*
+	BaiduPCS-Go lsall /我的*
 `,
 			Category: "百度网盘",
 			Before:   reloadFn,
@@ -1535,7 +1535,7 @@ func main() {
 		{
 			Name:      "transfer",
 			Usage:     "转存文件/目录",
-			UsageText: app.Name + " transfer <分享链接> <提取码>(如果有)",
+			UsageText: app.Name + " transfer <分享链接> <提取码>(如果有) <保存的网盘路径>(如果有, 默认当前工作目录)",
 			Category:  "百度网盘",
 			Before:    reloadFn,
 			Description: `
@@ -1544,13 +1544,13 @@ func main() {
 	分享链接支持常规百度云链接, 支持长短秒传链接
 	
 	实例：
-	BaiduPCS-Go transfer pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e
-	BaiduPCS-Go transfer https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e
-	BaiduPCS-Go transfer https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ?pwd=704e
+	BaiduPCS-Go transfer pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e /test
+	BaiduPCS-Go transfer https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e /test
+	BaiduPCS-Go transfer https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ?pwd=704e /test
 
 	`,
 			Action: func(c *cli.Context) error {
-				if c.NArg() < 1 || c.NArg() > 2 {
+				if c.NArg() < 1 || c.NArg() > 3 {
 					cli.ShowCommandHelp(c, c.Command.Name)
 					return nil
 				}
@@ -1576,6 +1576,33 @@ func main() {
 					Usage: "秒传随机替换4位文件名提高成功率",
 				},
 			},
+		},
+		{
+			Name:      "lsshare",
+			Usage:     "显示分享的文件/目录",
+			UsageText: app.Name + " lsshare <分享链接> <提取码>(如果有)",
+			Category:  "百度网盘",
+			Before:    reloadFn,
+			Description: `
+			转存文件/目录
+	如果没有提取码或为整合式链接，则第二个位置留空；只能转存到当前网盘目录下，
+	分享链接支持常规百度云链接, 支持长短秒传链接
+	
+	实例：
+	BaiduPCS-Go lsshare pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e
+	BaiduPCS-Go lsshare https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ 704e
+	BaiduPCS-Go lsshare https://pan.baidu.com/s/1VYzSl7465sdrQXe8GT5RdQ?pwd=704e
+
+	`,
+			Action: func(c *cli.Context) error {
+				if c.NArg() < 1 || c.NArg() > 2 {
+					cli.ShowCommandHelp(c, c.Command.Name)
+					return nil
+				}
+				pcscommand.RunShareFileInfo(c.Args())
+				return nil
+			},
+			Flags: []cli.Flag{},
 		},
 		{
 			Name:      "share",
