@@ -3,6 +3,7 @@ package baidupcs
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -135,17 +136,18 @@ var (
 type (
 	// BaiduPCS 百度 PCS API 详情
 	BaiduPCS struct {
-		appID       int                   // app_id
-		isHTTPS     bool                  // 是否启用https
-		uid         uint64                // 百度uid
-		client      *requester.HTTPClient // http 客户端
-		accessToken string                // accessToken
-		pcsUA       string
-		pcsAddr     string
-		panUA       string
-		isSetPanUA  bool
-		ph          *panhome.PanHome
-		cacheOpMap  cachemap.CacheOpMap
+		appID         int                   // app_id
+		isHTTPS       bool                  // 是否启用https
+		uid           uint64                // 百度uid
+		client        *requester.HTTPClient // http 客户端
+		accessToken   string                // accessToken
+		pcsUA         string
+		pcsAddr       string
+		pcsAddrUpload string
+		panUA         string
+		isSetPanUA    bool
+		ph            *panhome.PanHome
+		cacheOpMap    cachemap.CacheOpMap
 	}
 
 	userInfoJSON struct {
@@ -358,6 +360,11 @@ func (pcs *BaiduPCS) SetPCSAddr(addr string) {
 	pcs.pcsAddr = addr
 }
 
+// SetPCSAddrUpload 设置 PCS 上传服务器地址
+func (pcs *BaiduPCS) SetPCSAddrUpload(addr string) {
+	pcs.pcsAddrUpload = addr
+}
+
 // SetPanUserAgent 设置 Pan User-Agent
 func (pcs *BaiduPCS) SetPanUserAgent(ua string) {
 	pcs.panUA = ua
@@ -375,6 +382,20 @@ func (pcs *BaiduPCS) URL() *url.URL {
 	if host == "" {
 		host = PCSBaiduCom
 	}
+	fmt.Printf("pcs host: %s\n", host)
+	return &url.URL{
+		Scheme: GetHTTPScheme(pcs.isHTTPS),
+		Host:   host,
+	}
+}
+
+// URLUpload returns upload url
+func (pcs *BaiduPCS) URLUpload() *url.URL {
+	host := pcs.pcsAddrUpload
+	if host == "" {
+		host = PCSBaiduCom
+	}
+	fmt.Printf("upload host: %s\n", host)
 	return &url.URL{
 		Scheme: GetHTTPScheme(pcs.isHTTPS),
 		Host:   host,
@@ -388,7 +409,13 @@ func (pcs *BaiduPCS) getPanUAHeader() (header map[string]string) {
 }
 
 func (pcs *BaiduPCS) generatePCSURL(subPath, method string, param ...map[string]string) *url.URL {
-	pcsURL := pcs.URL()
+	var pcsURL *url.URL
+	if method == "upload" || method == "rapidupload" || method == "createsuperfile" {
+		pcsURL = pcs.URLUpload()
+	} else {
+		pcsURL = pcs.URL()
+	}
+
 	pcsURL.Path = "/rest/2.0/pcs/" + subPath
 
 	uv := pcsURL.Query()

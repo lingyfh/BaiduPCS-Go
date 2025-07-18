@@ -2050,6 +2050,13 @@ func main() {
 								return nil
 							}
 						}
+						if c.IsSet("pcs_addr_upload") {
+							match := pcsconfig.Config.SETPCSAddrUpload(c.String("pcs_addr_upload"))
+							if !match {
+								fmt.Println("设置 pcs_addr_upload 错误: pcs上传服务器地址不合法")
+								return nil
+							}
+						}
 						if c.IsSet("pan_ua") {
 							pcsconfig.Config.SetPanUA(c.String("pan_ua"))
 						}
@@ -2175,6 +2182,10 @@ func main() {
 						cli.StringFlag{
 							Name:  "pcs_addr",
 							Usage: "PCS 服务器地址",
+						},
+						cli.StringFlag{
+							Name:  "pcs_addr_upload",
+							Usage: "PCS 上传服务器地址",
 						},
 						cli.StringFlag{
 							Name:  "pan_ua",

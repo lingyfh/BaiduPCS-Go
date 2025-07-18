@@ -83,6 +83,7 @@ func (c *PCSConfig) PrintTable() {
 		[]string{"user_agent", c.UserAgent, requester.DefaultUserAgent, "浏览器标识"},
 		[]string{"pcs_ua", c.PCSUA, "", "PCS 浏览器标识"},
 		[]string{"pcs_addr", c.PCSAddr, "pcs.baidu.com", "PCS 服务器地址"},
+		[]string{"pcs_addr_upload", c.PCSAddrUpload, "pcs.baidu.com", "PCS 上传服务器地址"},
 		[]string{"pan_ua", c.PanUA, baidupcs.NetdiskUA, "Pan 浏览器标识"},
 		[]string{"proxy", c.Proxy, "", "设置代理, 支持 http/socks5 代理"},
 		[]string{"local_addrs", c.LocalAddrs, "", "设置本地网卡地址, 多个地址用逗号隔开"},
