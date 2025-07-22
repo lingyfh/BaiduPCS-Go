@@ -93,7 +93,7 @@ func init() {
 func main() {
 	defer pcsconfig.Config.Close()
 
-	fmt.Printf("BaiduPCS-Go Version: %s.a\n", Version)
+	fmt.Printf("BaiduPCS-Go Version: %s.b\n", Version)
 	app := cli.NewApp()
 	app.Name = "BaiduPCS-Go"
 	app.Version = Version
