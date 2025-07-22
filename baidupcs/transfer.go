@@ -59,7 +59,7 @@ func (pcs *BaiduPCS) ExtractShareInfo(shareURL, shardID, shareUK, bdstoken strin
 		}
 		return
 	}
-	res["list"] = gjson.Get(string(body), `list`).String()
+
 	res["filename"] = gjson.Get(string(body), `list.0.server_filename`).String()
 	fsidList := gjson.Get(string(body), `list.#.fs_id`).Array()
 	var fidsStr string = "["
@@ -82,12 +82,16 @@ func (pcs *BaiduPCS) ExtractShareInfo(shareURL, shardID, shareUK, bdstoken strin
 	uv.Set("web", "1")
 	for key, value := range res {
 		uv.Set(key, value)
+		// fmt.Printf("key: %s, value: %s\n", key, value)
 	}
 	res["item_num"] = strconv.Itoa(len(fsidList))
 	res["ErrMsg"] = "success"
 	res["fs_id"] = fidsStr[:len(fidsStr)-1] + "]"
 	shareUrl.RawQuery = uv.Encode()
 	res["shareUrl"] = shareUrl.String()
+	// 不能放在uv := shareUrl.Query()之前，否则uv := shareUrl.Query()会将list放入url中，导致url过长
+	res["list"] = gjson.Get(string(body), `list`).String()
+
 	return
 }
 
@@ -174,6 +178,9 @@ func (pcs *BaiduPCS) GenerateRequestQuery(mode string, params map[string]string)
 	postdata := make(map[string]string)
 	postdata["fsidlist"] = params["fs_id"]
 	postdata["path"] = params["path"]
+	// fmt.Printf("shareUrl: %v\n", params["shareUrl"])
+	// fmt.Printf("headers: %v\n", headers)
+	// fmt.Printf("postdata: %v\n", postdata)
 	dataReadCloser, panError := pcs.sendReqReturnReadCloser(reqTypePan, OperationShareFileSavetoLocal, mode, params["shareUrl"], postdata, headers)
 	if panError != nil {
 		res["ErrNo"] = "1"
@@ -187,12 +194,13 @@ func (pcs *BaiduPCS) GenerateRequestQuery(mode string, params map[string]string)
 		res["ErrMsg"] = "未知错误"
 		return
 	}
+	fmt.Printf("body: %s\n", string(body))
 	if !gjson.Valid(string(body)) {
 		res["ErrNo"] = "2"
 		res["ErrMsg"] = "返回json解析错误"
 		return
 	}
-	fmt.Printf("body: %s\n", string(body))
+	// fmt.Printf("body: %s\n", string(body))
 	errno := gjson.Get(string(body), `errno`).Int()
 
 	if errno != 0 {
@@ -239,7 +247,6 @@ func (pcs *BaiduPCS) GenerateRequestQuery(mode string, params map[string]string)
 		return
 	}
 
-
 CONTINUE_PROCESSING:
 	res["ErrNo"] = "0"
 	res["ErrMsg"] = ""
@@ -249,7 +256,9 @@ CONTINUE_PROCESSING:
 	for _, _path := range filenames {
 		filenamesStr += "," + path.Base(_path.String())
 	}
-	res["filenames"] = filenamesStr[1:]
+	if len(filenamesStr) > 1 {
+		res["filenames"] = filenamesStr[1:]
+	}
 	if len(gjson.Get(string(body), `info.#.fsid`).Array()) > 1 {
 		res["filename"] += "等多个文件/文件夹"
 	}
