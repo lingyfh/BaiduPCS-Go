@@ -2,6 +2,9 @@ package baidupcs
 
 import (
 	"fmt"
+	"github.com/qjfoidnh/BaiduPCS-Go/pcsutil"
+	"github.com/qjfoidnh/BaiduPCS-Go/requester"
+	"github.com/tidwall/gjson"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -10,9 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/qjfoidnh/BaiduPCS-Go/requester"
-	"github.com/tidwall/gjson"
 )
 
 type (
@@ -256,7 +256,10 @@ CONTINUE_PROCESSING:
 	for _, _path := range filenames {
 		filenamesStr += "," + path.Base(_path.String())
 	}
-	if len(filenamesStr) > 1 {
+
+	if len(filenamesStr) < 1 {
+		res["filenames"] = "default" + pcsutil.GenerateRandomString(5)
+	} else {
 		res["filenames"] = filenamesStr[1:]
 	}
 	if len(gjson.Get(string(body), `info.#.fsid`).Array()) > 1 {
