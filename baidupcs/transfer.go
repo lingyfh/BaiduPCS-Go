@@ -121,7 +121,7 @@ func (pcs *BaiduPCS) AccessSharePage(featurestr string, first bool) (tokens map[
 	tokens = make(map[string]string)
 	tokens["ErrMsg"] = "0"
 	headers := make(map[string]string)
-	headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36"
+	headers["User-Agent"] = NetdiskUA // PR535：Chrome 76 UA 会被反爬弹到无 loginstate 的登录页
 	headers["Referer"] = "https://pan.baidu.com/disk/home"
 	if !first {
 		headers["Referer"] = fmt.Sprintf("https://pan.baidu.com/share/init?surl=%s", featurestr[1:])
@@ -146,7 +146,7 @@ func (pcs *BaiduPCS) AccessSharePage(featurestr string, first bool) (tokens map[
 		tokens["ErrMsg"] = "分享链接已失效"
 		return
 	} else {
-		re, _ := regexp.Compile(`(\{.+?loginstate.+?\})\);`)
+		re, _ := regexp.Compile(`(\{.+?loginstate.+?\})`) // PR535：新页 try{{...}}; 无 ); 结尾
 		sub := re.FindSubmatch(body)
 		if len(sub) < 2 {
 			tokens["ErrMsg"] = "请确认登录参数中已经包含了网盘STOKEN"
